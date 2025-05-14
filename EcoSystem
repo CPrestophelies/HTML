@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurable Ecosystem Simulation with Analysis & Tooltips</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* --- Basic styles --- */
+        body { font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; background-color: #f0f4f8; margin: 0; padding: 20px; box-sizing: border-box; }
+        canvas { background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 0.5rem; display: block; max-width: 100%; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        #simulationCanvas { margin-bottom: 1rem; }
+        #info { margin-bottom: 1rem; padding: 0.75rem; background-color: #e5e7eb; border-radius: 0.5rem; min-width: 400px; text-align: center; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); }
+        #chartContainer, #analysisContainer { width: 100%; max-width: 800px; margin-top: 1.5rem; padding: 1rem; background-color: #ffffff; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        #simulationChart { max-height: 400px; }
+        .species-info { display: inline-block; margin: 0 0.5rem 0.25rem 0.5rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 500; white-space: nowrap; }
+        #settingsPanel { width: 100%; max-width: 800px; background-color: #fff; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); margin-bottom: 1.5rem; }
+        #settingsPanel h2 { text-align: center; margin-bottom: 1rem; color: #374151; }
+        .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .settings-group { border: 1px solid #e5e7eb; border-radius: 0.375rem; padding: 0.75rem; }
+        .settings-group h3 { font-weight: 600; color: #4b5563; margin-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
+        .settings-item { display: flex; flex-direction: column; margin-bottom: 0.5rem; }
+        .settings-item label { font-size: 0.875rem; color: #6b7280; margin-bottom: 0.25rem; display: inline-block; /* Needed for inline-block trigger */ }
+        .settings-item input { padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; }
+        .settings-item input:focus { outline: 2px solid transparent; outline-offset: 2px; border-color: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+        #startButton { display: block; width: 100%; padding: 0.75rem; background-color: #2563eb; color: white; font-weight: 600; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s; }
+        #startButton:hover { background-color: #1d4ed8; }
+        #simulationContainer, #chartContainer, #analysisContainer { display: none; } /* Hide all initially */
+        #analysisContainer h2 { text-align: center; margin-bottom: 1rem; color: #374151; }
+        #analysisResults p { margin-bottom: 0.5rem; font-size: 0.9rem; color: #4b5563; }
+        #analysisResults code { background-color: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85rem;}
+        #analysisResults strong { color: #1f2937; }
+        #analysisResults ul { list-style: disc; padding-left: 20px; margin-top: 0.25rem; margin-bottom: 0.75rem;}
+        #analysisResults li { margin-bottom: 0.25rem;}
+
+        /* --- Tooltip Styles --- */
+        .tooltip-trigger {
+            display: inline-block;
+            margin-left: 5px;
+            position: relative;
+            cursor: help;
+            background-color: #e5e7eb;
+            color: #4b5563;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            font-size: 11px;
+            line-height: 16px;
+            text-align: center;
+            font-weight: bold;
+            user-select: none;
+            vertical-align: middle; /* Align with text better */
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            width: 220px;
+            background-color: #374151;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px 10px;
+            position: absolute;
+            z-index: 10;
+            bottom: 130%;
+            left: 50%;
+            margin-left: -110px;
+            transition: opacity 0.3s ease-in-out;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            font-weight: normal;
+        }
+
+        .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #374151 transparent transparent transparent;
+        }
+
+        .tooltip-trigger:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* --- End Tooltip Styles --- */
+
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <h1 class="text-2xl font-bold mb-4 text-gray-700">Configurable Ecosystem Simulation with Analysis & Tooltips</h1>
+
+    <div id="settingsPanel">
+        <h2 class="text-xl font-semibold">Simulation Settings</h2>
+        <div class="settings-grid">
+            <div class="settings-group">
+                <h3>General</h3>
+                <div class="settings-item">
+                    <label for="initialResources">Initial Resources: <span id="icon-resources"></span></label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">The base amount of energy/food the ecosystem starts with. Producers (like Grass) consume this.</span></span>
+                    <input type="number" id="initialResources" value="100" step="10">
+                </div>
+                <div class="settings-item">
+                    <label for="regenerationRate">Regen Rate:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">How fast resources regenerate (0=none, 1=instant refill to max). Affects the environment's overall carrying capacity.</span></span>
+                    <input title="Regeneration Rate (0-1)" type="number" id="regenerationRate" value="0.1" step="0.01" min="0" max="1">
+                </div>
+                <div class="settings-item">
+                    <label for="maxDraw">Max Draw/Species:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Visual only: Max individuals drawn per species to improve performance. Doesn't change simulation math.</span></span>
+                    <input type="number" id="maxDraw" value="150" step="10" min="1">
+                </div>
+                <div class="settings-item">
+                    <label for="simSpeed">Sim Speed (ms):</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Delay between simulation steps in milliseconds (lower = faster simulation).</span></span>
+                    <input title="Simulation Speed (ms/step)" type="number" id="simSpeed" value="200" step="50" min="10">
+                </div>
+                <div class="settings-item">
+                    <label for="maxSteps">Max Steps:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">The maximum number of time steps the simulation runs before stopping automatically.</span></span>
+                    <input title="Max Simulation Steps" type="number" id="maxSteps" value="200" step="10" min="1">
+                </div>
+                 <div class="settings-item">
+                    <label for="predPreyRatio">Pred/Prey Ratio:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Limits predator growth based on prey. Capacity = Prey Pop * Ratio. Higher allows more predators per prey.</span></span>
+                    <input title="Predator/Prey Ratio Limit" type="number" id="predPreyRatio" value="0.5" step="0.05" min="0">
+                </div>
+                 <div class="settings-item">
+                    <label for="predEfficiency">Pred Efficiency:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">How effective predators are at capturing prey. Higher value means more prey removed per predator.</span></span>
+                    <input title="Predation Efficiency" type="number" id="predEfficiency" value="0.001" step="0.0001" min="0">
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3 id="header-grass">Grass</h3>
+                <div class="settings-item">
+                    <label for="grassPop">Init Pop:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Number of Grass units at the start of the simulation.</span></span>
+                    <input title="Initial Population" type="number" id="grassPop" value="80" step="5" min="0">
+                </div>
+                <div class="settings-item">
+                    <label for="grassGrowth">Growth Rate:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Intrinsic growth rate when resources are abundant. Limited by resource availability.</span></span>
+                    <input type="number" id="grassGrowth" value="0.3" step="0.05" min="0">
+                </div>
+                 <div class="settings-item">
+                    <label for="grassConsume">Resource Use:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Amount of base resource each Grass unit consumes per time step to survive/grow.</span></span>
+                    <input title="Resource Consumption" type="number" id="grassConsume" value="0.5" step="0.1" min="0">
+                </div>
+            </div>
+            <div class="settings-group">
+                <h3 id="header-rabbit">Rabbit</h3>
+                 <div class="settings-item">
+                    <label for="rabbitPop">Init Pop:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Number of Rabbits at the start of the simulation.</span></span>
+                    <input title="Initial Population" type="number" id="rabbitPop" value="20" step="1" min="0">
+                </div>
+                <div class="settings-item">
+                    <label for="rabbitGrowth">Growth Rate:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Intrinsic growth rate when food (Grass) is abundant. Limited by food and predator ratio.</span></span>
+                    <input type="number" id="rabbitGrowth" value="0.2" step="0.05" min="0">
+                </div>
+            </div>
+             <div class="settings-group">
+                <h3 id="header-fox">Fox</h3>
+                 <div class="settings-item">
+                    <label for="foxPop">Init Pop:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Number of Foxes at the start of the simulation.</span></span>
+                    <input title="Initial Population" type="number" id="foxPop" value="10" step="1" min="0">
+                </div>
+                <div class="settings-item">
+                    <label for="foxGrowth">Growth Rate:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Intrinsic growth rate when food (Rabbits) is abundant. Limited by food and predator ratio.</span></span>
+                    <input type="number" id="foxGrowth" value="0.15" step="0.01" min="0">
+                </div>
+            </div>
+             <div class="settings-group">
+                <h3 id="header-wolf">Wolf</h3>
+                 <div class="settings-item">
+                    <label for="wolfPop">Init Pop:</label>
+                     <span class="tooltip-trigger">?<span class="tooltip-text">Number of Wolves at the start of the simulation.</span></span>
+                    <input title="Initial Population" type="number" id="wolfPop" value="5" step="1" min="0">
+                </div>
+                <div class="settings-item">
+                    <label for="wolfGrowth">Growth Rate:</label>
+                    <span class="tooltip-trigger">?<span class="tooltip-text">Intrinsic growth rate when food (Foxes, Rabbits) is abundant. Limited by food and predator ratio.</span></span>
+                    <input type="number" id="wolfGrowth" value="0.1" step="0.01" min="0">
+                </div>
+            </div>
+        </div>
+        <button id="startButton">Start / Restart Simulation</button>
+    </div>
+
+    <div id="simulationContainer">
+        <canvas id="simulationCanvas" width="600" height="400"></canvas>
+        <div id="info" class="mt-4 p-3 bg-gray-200 rounded shadow min-w-[300px] text-center">
+            <p id="status" class="text-sm font-semibold text-blue-600 mb-1">Status: Ready</p>
+            <p id="timeStep" class="text-sm text-gray-600 mb-1">Time Step: 0</p>
+            <p id="resources" class="text-sm text-gray-600 mb-2">Resources: 0.00</p> <div id="populations" class="text-sm"></div>
+        </div>
+    </div>
+
+    <div id="chartContainer">
+         <h2 class="text-xl font-semibold mb-3 text-center text-gray-700">Simulation Log Graph</h2>
+         <canvas id="simulationChart"></canvas>
+     </div>
+
+    <div id="analysisContainer">
+         <h2 class="text-xl font-semibold">Post-Simulation Analysis</h2>
+         <div id="analysisResults">
+             <p>Analysis results will appear here after the simulation ends.</p>
+         </div>
+     </div>
+
+
+    <script>
+        // --- Global Settings Object ---
+        let settings = {
+            INITIAL_RESOURCES: 100,
+            REGENERATION_RATE: 0.1,
+            MAX_DRAW_PER_SPECIES: 150,
+            SIMULATION_SPEED_MS: 200,
+            MAX_SIMULATION_STEPS: 200,
+            PREDATOR_PREY_RATIO: 0.5,
+            PREDATION_EFFICIENCY: 0.001,
+            species: {
+                grass: { pop: 80, growth: 0.3, consume: 0.5, food: [], color: '#22c55e', size: 3 },
+                rabbit: { pop: 20, growth: 0.2, consume: 0, food: ['Grass'], color: '#a1a1aa', size: 4 },
+                fox: { pop: 10, growth: 0.15, consume: 0, food: ['Rabbit'], color: '#f97316', size: 5 },
+                wolf: { pop: 5, growth: 0.1, consume: 0, food: ['Fox', 'Rabbit'], color: '#64748b', size: 6 }
+            }
+        };
+
+        // --- Icon Mapping ---
+        const entityIcons = {
+            resources: '💎',
+            grass: '🌿',
+            rabbit: '🐇',
+            fox: '🦊',
+            wolf: '🐺',
+            predators: '🐾'
+        };
+
+        // --- Canvas Setup ---
+        const simCanvas = document.getElementById('simulationCanvas');
+        const simCtx = simCanvas.getContext('2d');
+        const canvasWidth = simCanvas.width;
+        const canvasHeight = simCanvas.height;
+
+        // --- DOM Elements ---
+        const statusEl = document.getElementById('status');
+        const timeStepEl = document.getElementById('timeStep');
+        const resourcesEl = document.getElementById('resources');
+        const populationsEl = document.getElementById('populations');
+        const chartContainer = document.getElementById('chartContainer');
+        const chartCanvas = document.getElementById('simulationChart');
+        const startButton = document.getElementById('startButton');
+        const simulationContainer = document.getElementById('simulationContainer');
+        const analysisContainer = document.getElementById('analysisContainer');
+        const analysisResultsEl = document.getElementById('analysisResults');
+
+        // --- Simulation State ---
+        let simulationLog = [];
+        let simulationRunning = false;
+        let chartInstance = null;
+        let ecosystem = null;
+        let animationFrameId = null;
+
+        // --- Read Settings from Inputs ---
+        function readSettings() {
+            const getNum = (id, defaultValue, isFloat = false, min = -Infinity, max = Infinity) => {
+                const input = document.getElementById(id);
+                let value = isFloat ? parseFloat(input?.value) : parseInt(input?.value);
+                // Use default if NaN, less than min, or greater than max
+                if (isNaN(value) || value < min || value > max) {
+                    // console.warn(`Invalid value for ${id}, using default: ${defaultValue}`); // Optional warning
+                    value = defaultValue;
+                    if (input) input.value = defaultValue; // Correct the input field
+                }
+                return value;
+            };
+            settings.INITIAL_RESOURCES = getNum('initialResources', 100, true, 0);
+            settings.REGENERATION_RATE = getNum('regenerationRate', 0.1, true, 0, 1);
+            settings.MAX_DRAW_PER_SPECIES = getNum('maxDraw', 150, false, 1);
+            settings.SIMULATION_SPEED_MS = getNum('simSpeed', 200, false, 10);
+            settings.MAX_SIMULATION_STEPS = getNum('maxSteps', 200, false, 1);
+            settings.PREDATOR_PREY_RATIO = getNum('predPreyRatio', 0.5, true, 0);
+            settings.PREDATION_EFFICIENCY = getNum('predEfficiency', 0.001, true, 0);
+
+            settings.species.grass.pop = getNum('grassPop', 80, false, 0);
+            settings.species.grass.growth = getNum('grassGrowth', 0.3, true, 0);
+            settings.species.grass.consume = getNum('grassConsume', 0.5, true, 0);
+
+            settings.species.rabbit.pop = getNum('rabbitPop', 20, false, 0);
+            settings.species.rabbit.growth = getNum('rabbitGrowth', 0.2, true, 0);
+
+            settings.species.fox.pop = getNum('foxPop', 10, false, 0);
+            settings.species.fox.growth = getNum('foxGrowth', 0.15, true, 0);
+
+            settings.species.wolf.pop = getNum('wolfPop', 5, false, 0);
+            settings.species.wolf.growth = getNum('wolfGrowth', 0.1, true, 0);
+        }
+
+        // --- Function to set static icons ---
+        function setStaticIcons() {
+            const resIconEl = document.getElementById('icon-resources');
+            if(resIconEl) resIconEl.textContent = entityIcons.resources || '';
+
+            const grassHeader = document.getElementById('header-grass');
+            if(grassHeader) grassHeader.innerHTML = (entityIcons.grass || '') + ' Grass';
+
+            const rabbitHeader = document.getElementById('header-rabbit');
+            if(rabbitHeader) rabbitHeader.innerHTML = (entityIcons.rabbit || '') + ' Rabbit';
+
+            const foxHeader = document.getElementById('header-fox');
+            if(foxHeader) foxHeader.innerHTML = (entityIcons.fox || '') + ' Fox';
+
+            const wolfHeader = document.getElementById('header-wolf');
+            if(wolfHeader) wolfHeader.innerHTML = (entityIcons.wolf || '') + ' Wolf';
+        }
+
+
+        // --- Species Class ---
+        class Species {
+            constructor(name, config) {
+                this.name = name;
+                this.population = Math.floor(config.pop);
+                this.growthRate = config.growth;
+                this.color = config.color;
+                this.size = config.size;
+                this.foodSource = config.food; // Array of names
+                this.predators = []; // Array of names
+                this.resourceConsumption = config.consume;
+                this.positions = [];
+                this.updatePositions();
+            }
+
+            updatePositions() {
+                this.positions = [];
+                const countToDraw = Math.min(this.population, settings.MAX_DRAW_PER_SPECIES);
+                for (let i = 0; i < countToDraw; i++) {
+                    this.positions.push({
+                        x: Math.random() * canvasWidth,
+                        y: Math.random() * canvasHeight
+                    });
+                }
+            }
+
+            draw(context) {
+                context.fillStyle = this.color;
+                this.positions.forEach(pos => {
+                    context.beginPath();
+                    context.arc(pos.x, pos.y, this.size, 0, Math.PI * 2);
+                    context.fill();
+                });
+            }
+        }
+
+
+        // --- Ecosystem Class ---
+        class Ecosystem {
+            constructor(initialResources, regenerationRate) {
+                this.speciesMap = new Map(); // Stores Species objects by name
+                this.resources = initialResources;
+                this.maxResources = initialResources; // Cap regeneration at the starting amount
+                this.regenerationRate = regenerationRate;
+                this.timeStep = 0;
+            }
+
+            addSpecies(species) {
+                this.speciesMap.set(species.name, species);
+                this._updateInteractions(); // Ensure interactions are set up correctly
+            }
+
+            // Update predator lists based on food sources
+            _updateInteractions() {
+                // Clear existing predator lists
+                for (const sp of this.speciesMap.values()) {
+                    sp.predators = [];
+                }
+                // Populate predator lists
+                for (const potentialPredator of this.speciesMap.values()) {
+                    for (const preyName of potentialPredator.foodSource) {
+                        const preySpecies = this.speciesMap.get(preyName);
+                        if (preySpecies) {
+                            if (!preySpecies.predators.includes(potentialPredator.name)) {
+                                preySpecies.predators.push(potentialPredator.name);
+                            }
+                        } else {
+                            // console.warn(`Food source '${preyName}' for '${potentialPredator.name}' not found.`); // Optional warning
+                        }
+                    }
+                }
+            }
+
+            getSpecies(name) {
+                return this.speciesMap.get(name);
+            }
+
+            // Calculate carrying capacity based on resources or prey
+            calculateResourceLimit(species) {
+                if (species.foodSource.length === 0) { // Producer
+                    if (species.resourceConsumption <= 0) return Infinity;
+                    // Capacity limited by base resources
+                    return this.resources / species.resourceConsumption;
+                } else { // Consumer
+                    let totalFoodPopulation = 0;
+                    for (const foodName of species.foodSource) {
+                        const foodSpecies = this.getSpecies(foodName);
+                        if (foodSpecies) {
+                            totalFoodPopulation += foodSpecies.population;
+                        }
+                    }
+                    // Capacity limited by prey population and ratio setting
+                    return totalFoodPopulation * settings.PREDATOR_PREY_RATIO;
+                }
+            }
+
+            // Calculate population loss due to predation
+            calculatePredationEffect(species) {
+                let predationLoss = 0;
+                for (const predatorName of species.predators) {
+                    const predator = this.getSpecies(predatorName);
+                    if (predator && predator.population > 0) {
+                        // Loss based on predator count, prey count, and efficiency setting
+                        const loss = settings.PREDATION_EFFICIENCY * predator.population * species.population;
+                        predationLoss += loss;
+                    }
+                }
+                return predationLoss;
+            }
+
+            // Log current state for graphing/analysis
+            logCurrentState() {
+                const logEntry = { time: this.timeStep, resources: this.resources };
+                // Add population of each species using lowercase names as keys
+                for(const [name, species] of this.speciesMap) {
+                    logEntry[name.toLowerCase()] = species.population;
+                };
+                // Add combined predator count for convenience
+                logEntry.predators = (logEntry.fox ?? 0) + (logEntry.wolf ?? 0);
+                simulationLog.push(logEntry);
+            }
+
+            // Run one time step of the simulation
+            simulateStep() {
+                this.logCurrentState(); // Log state BEFORE making changes for this step
+
+                this.timeStep++;
+                const nextPopulation = new Map(); // Store calculated next populations
+                let totalResourceConsumption = 0;
+
+                // 1. Resource Regeneration
+                this.resources += this.regenerationRate * (this.maxResources - this.resources);
+                this.resources = Math.min(this.resources, this.maxResources); // Cap resources
+
+                // 2. Calculate population changes (in random order to avoid bias)
+                const speciesArray = Array.from(this.speciesMap.values());
+                speciesArray.sort(() => Math.random() - 0.5); // Shuffle update order
+
+                for (const species of speciesArray) {
+                    if (species.population <= 0) {
+                        nextPopulation.set(species.name, 0); // Keep extinct species at 0
+                        continue;
+                    }
+
+                    const carryingCapacity = this.calculateResourceLimit(species);
+                    const baseGrowth = species.growthRate * species.population;
+                    let growth = 0;
+
+                    // Apply logistic growth limitation
+                    if (carryingCapacity > 0 && isFinite(carryingCapacity)) {
+                        const growthLimitFactor = Math.max(0, (1 - species.population / carryingCapacity));
+                        growth = baseGrowth * growthLimitFactor;
+                    } else if (carryingCapacity === 0) { // No food/resources available
+                        growth = -baseGrowth * 2; // Faster decline (starvation)
+                    } else { // Infinite capacity (e.g., producer with 0 consumption)
+                        growth = baseGrowth;
+                    }
+
+                    const predationLoss = this.calculatePredationEffect(species);
+                    const deltaPopulation = growth - predationLoss;
+                    const newPop = species.population + deltaPopulation;
+
+                    // Store the calculated new population (non-negative integer)
+                    nextPopulation.set(species.name, Math.max(0, Math.floor(newPop)));
+
+                    // Accumulate resource consumption for producers based on *next* population
+                    if (species.foodSource.length === 0 && species.resourceConsumption > 0) {
+                        totalResourceConsumption += nextPopulation.get(species.name) * species.resourceConsumption;
+                    }
+                }
+
+                // 3. Update Populations and Resources *after* all calculations are done
+                for (const [name, pop] of nextPopulation) {
+                    const species = this.getSpecies(name);
+                    if (species) {
+                        const populationChanged = (species.population !== pop);
+                        species.population = pop;
+                        // Update visual positions less frequently or only if changed
+                        if (populationChanged || this.timeStep % 5 === 0) {
+                            species.updatePositions();
+                        }
+                    }
+                }
+
+                // Apply resource consumption
+                this.resources -= totalResourceConsumption;
+                this.resources = Math.max(0, this.resources); // Ensure resources >= 0
+            }
+
+            // Draw the ecosystem state onto the canvas
+            draw(context) {
+                context.clearRect(0, 0, canvasWidth, canvasHeight); // Clear canvas
+
+                // Draw background based on resource level
+                const resourceRatio = Math.max(0, Math.min(1, this.resources / this.maxResources));
+                const r = Math.floor(180 + (144 - 180) * resourceRatio); // Less red = greener
+                const g = Math.floor(200 + (238 - 200) * resourceRatio); // More green = greener
+                const b = Math.floor(180 + (144 - 180) * resourceRatio); // Less blue = greener
+                context.fillStyle = `rgb(${r},${g},${b})`;
+                context.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                // Draw each species
+                for (const species of this.speciesMap.values()) {
+                    if (species.population > 0) {
+                        species.draw(context);
+                    }
+                }
+            }
+
+            // Update the HTML info panel
+            updateInfo() {
+                timeStepEl.textContent = `Time Step: ${this.timeStep}`;
+                // Update resources display with icon
+                resourcesEl.innerHTML = `${entityIcons.resources || ''} Resources: <span class="font-medium">${this.resources.toFixed(2)}</span>`;
+
+                let populationHTML = '';
+                const sortedSpecies = Array.from(this.speciesMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+                for (const species of sortedSpecies) {
+                     let bgColorClass = 'bg-gray-400'; // Map color to Tailwind class
+                     if (species.color === '#22c55e') bgColorClass = 'bg-green-500';
+                     if (species.color === '#a1a1aa') bgColorClass = 'bg-gray-400';
+                     if (species.color === '#f97316') bgColorClass = 'bg-orange-500';
+                     if (species.color === '#64748b') bgColorClass = 'bg-slate-500';
+
+                     const icon = entityIcons[species.name.toLowerCase()] || '❔'; // Get icon
+
+                     populationHTML += `<span class="species-info ${bgColorClass} text-white"> ${icon} ${species.name}: ${species.population} </span>`; // Add icon
+                }
+                populationsEl.innerHTML = populationHTML || '<span>No species remaining.</span>';
+            }
+        }
+
+
+        // --- Statistics Helper Functions ---
+        function calculateMean(dataArray) {
+            if (!dataArray || dataArray.length === 0) return 0;
+            const sum = dataArray.reduce((acc, val) => acc + (val || 0), 0); // Handle potential undefined/NaN
+            return sum / dataArray.length;
+        }
+
+        function calculateStdDev(dataArray, mean) {
+            if (!dataArray || dataArray.length < 2) return 0;
+            const sqDiffs = dataArray.map(value => Math.pow((value || 0) - mean, 2)); // Handle potential undefined/NaN
+            const avgSqDiff = calculateMean(sqDiffs);
+            return Math.sqrt(avgSqDiff);
+        }
+
+        function calculateLinearRegression(xArray, yArray) {
+            if (!xArray || !yArray || xArray.length !== yArray.length || xArray.length < 2) {
+                return { slope: 0, intercept: 0, rSquared: 0, predict: (x) => 0 };
+            }
+            const n = xArray.length;
+            const meanX = calculateMean(xArray);
+            const meanY = calculateMean(yArray);
+            let ssXX = 0, ssYY = 0, ssXY = 0;
+
+            for (let i = 0; i < n; i++) {
+                 const xDev = (xArray[i] || 0) - meanX;
+                 const yDev = (yArray[i] || 0) - meanY;
+                 ssXX += Math.pow(xDev, 2);
+                 ssYY += Math.pow(yDev, 2);
+                 ssXY += xDev * yDev;
+            }
+
+            if (ssXX === 0) return { slope: 0, intercept: meanY, rSquared: 0, predict: (x) => meanY };
+            const slope = ssXY / ssXX;
+            const intercept = meanY - slope * meanX;
+            const rSquared = ssYY === 0 ? 1 : Math.pow(ssXY, 2) / (ssXX * ssYY);
+            const predict = (x) => slope * x + intercept;
+            return { slope, intercept, rSquared, predict };
+        }
+
+
+        // --- Graphing Function ---
+        function displayGraph(logData, regressionLineData = null, regressionLabel = '') {
+            if (chartInstance) { chartInstance.destroy(); }
+            chartContainer.style.display = 'block';
+            const ctx = chartCanvas.getContext('2d');
+            const datasets = [];
+            const colors = { resources: 'rgba(34, 139, 34, 1)', grass: 'rgba(34, 197, 94, 1)', rabbits: 'rgba(161, 161, 170, 1)', predators: 'rgba(255, 69, 0, 1)', fox: 'rgba(249, 115, 22, 1)', wolf: 'rgba(100, 116, 139, 1)' };
+            const backgroundColors = { resources: 'rgba(34, 139, 34, 0.1)', grass: 'rgba(34, 197, 94, 0.1)', rabbits: 'rgba(161, 161, 170, 0.1)', predators: 'rgba(255, 69, 0, 0.1)', fox: 'rgba(249, 115, 22, 0.1)', wolf: 'rgba(100, 116, 139, 0.1)' };
+
+             if (logData.length > 0) {
+                const keys = Object.keys(logData[0]).filter(key => key !== 'time');
+                keys.forEach(key => {
+                    const keyData = logData.map(entry => entry[key]);
+                    // Ensure data exists and has some non-zero values (except for resources)
+                    if (keyData.some(val => !isNaN(val) && val !== undefined) && (keyData.some(val => val !== 0) || key === 'resources')) {
+                         const icon = entityIcons[key] || '';
+                         const labelName = key.charAt(0).toUpperCase() + key.slice(1);
+                         const fullLabel = icon ? `${icon} ${labelName}` : labelName;
+
+                         datasets.push({
+                            label: fullLabel,
+                            data: keyData,
+                            borderColor: colors[key.toLowerCase()] || '#000000',
+                            backgroundColor: backgroundColors[key.toLowerCase()] || 'rgba(0,0,0,0.1)',
+                            borderWidth: 2, tension: 0.1, pointRadius: 0, yAxisID: 'y'
+                        });
+                    }
+                });
+
+                // Add regression line dataset if provided
+                if (regressionLineData && regressionLabel) {
+                    datasets.push({
+                        label: regressionLabel, // Label already includes icon if needed
+                        data: regressionLineData,
+                        borderColor: 'rgba(0, 0, 255, 0.6)', borderWidth: 2, borderDash: [5, 5],
+                        pointRadius: 0, fill: false, yAxisID: 'y', tension: 0
+                    });
+                }
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line', data: { labels: logData.map(entry => entry.time), datasets: datasets },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: 'Count / Amount' }, type: 'linear', position: 'left', }, x: { title: { display: true, text: 'Time Step' } } }, plugins: { title: { display: true, text: 'Ecosystem Population and Resource Trends' }, legend: { display: true, position: 'top' } }, animation: { duration: 0 } }
+            });
+        }
+
+         // --- Analysis Function (Corrected Key Names) ---
+        function performAnalysis(logData) {
+            analysisResultsEl.innerHTML = ''; // Clear previous
+            if (!logData || logData.length < 2) {
+                 analysisResultsEl.innerHTML = '<p>Not enough data for analysis (minimum 2 time steps required).</p>';
+                 analysisContainer.style.display = 'block';
+                 // Still display graph even if analysis fails
+                 displayGraph(logData);
+                 return;
+            }
+
+            let resultsHTML = '';
+            const timeData = logData.map(entry => entry.time);
+
+            // Standard Deviations
+            resultsHTML += '<p><strong>Variability (Standard Deviation):</strong></p><ul>';
+            // Keys to check (use lowercase singular as logged) + 'resources' and 'predators'
+            const keysToAnalyzeSD = ['resources', 'grass', 'rabbit', 'fox', 'wolf', 'predators'];
+            keysToAnalyzeSD.forEach(key => {
+                 // Check if the key actually exists in the first log entry
+                 if (logData[0].hasOwnProperty(key)) {
+                    const data = logData.map(entry => entry[key]);
+                    if (data.some(val => val !== undefined && !isNaN(val))) { // Ensure some valid data exists
+                         const mean = calculateMean(data);
+                         const sd = calculateStdDev(data, mean);
+                         const icon = entityIcons[key] || '❔'; // Use original key for icon lookup
+                         // Capitalize correctly for display
+                         const labelName = key.charAt(0).toUpperCase() + key.slice(1);
+                         resultsHTML += `<li>${icon} ${labelName}: Mean = <code>${mean.toFixed(2)}</code>, SD = <code>${sd.toFixed(2)}</code></li>`;
+                    }
+                 }
+            });
+            resultsHTML += '</ul>';
+
+            // Linear Regression Examples
+            let regressionLine = null;
+            let regressionLabel = '';
+            const rabbitIcon = entityIcons.rabbit || ''; // Use base 'rabbit' key
+            const foxIcon = entityIcons.fox || '';       // Use base 'fox' key
+
+            // Check for 'rabbit' key (singular)
+            resultsHTML += `<p><strong>Linear Trend Analysis (Example: Time vs ${rabbitIcon}Rabbit):</strong></p>`;
+            if (logData[0].hasOwnProperty('rabbit')) { // CORRECTED KEY
+                const rabbitData = logData.map(entry => entry.rabbit); // CORRECTED KEY
+                const timeVsRabbitReg = calculateLinearRegression(timeData, rabbitData); // Variable name updated for clarity
+                // Use Rabbit (singular, capitalized) in text
+                resultsHTML += `<p>Regression: <code>${rabbitIcon}Rabbit ≈ ${timeVsRabbitReg.slope.toFixed(3)} * Time + ${timeVsRabbitReg.intercept.toFixed(2)}</code></p>`;
+                resultsHTML += `<p>Goodness of fit (R²): <code>${timeVsRabbitReg.rSquared.toFixed(3)}</code> (Closer to 1 means linear model fits better)</p>`;
+                // Prepare data for plotting regression line on the main chart
+                regressionLine = timeData.map(t => timeVsRabbitReg.predict(t));
+                // Update label for graph legend
+                regressionLabel = `${rabbitIcon} Rabbit Trend`; // Use singular
+            } else {
+                 resultsHTML += '<p>Rabbit data not available for regression analysis.</p>';
+            }
+
+            // Check for 'rabbit' and 'fox' keys (singular)
+            resultsHTML += `<p><strong>Linear Trend Analysis (Example: ${rabbitIcon}Rabbit vs ${foxIcon}Fox):</strong></p>`;
+             if (logData[0].hasOwnProperty('rabbit') && logData[0].hasOwnProperty('fox')) { // CORRECTED KEYS
+                 const rabbitDataPhase = logData.map(entry => entry.rabbit); // CORRECTED KEY
+                 const foxDataPhase = logData.map(entry => entry.fox);       // CORRECTED KEY
+                 // Filter out steps where either population is zero for interaction analysis
+                 const pairedData = timeData.map((t, i) => ({ r: rabbitDataPhase[i], f: foxDataPhase[i] })).filter(p => p.r > 0 && p.f > 0);
+                 if(pairedData.length >= 2) {
+                    const rabbitsFiltered = pairedData.map(p => p.r); // Keep plural variable name here is ok
+                    const foxesFiltered = pairedData.map(p => p.f);   // Keep plural variable name here is ok
+                    const rabbitVsFoxReg = calculateLinearRegression(rabbitsFiltered, foxesFiltered);
+                    // Use singular, capitalized names in text
+                    resultsHTML += `<p>Regression (when both > 0): <code>${foxIcon}Fox ≈ ${rabbitVsFoxReg.slope.toFixed(3)} * ${rabbitIcon}Rabbit + ${rabbitVsFoxReg.intercept.toFixed(2)}</code></p>`;
+                    resultsHTML += `<p>Goodness of fit (R²): <code>${rabbitVsFoxReg.rSquared.toFixed(3)}</code></p>`;
+                 } else {
+                     resultsHTML += '<p>Not enough data points where both Rabbit and Fox are present (> 0).</p>';
+                 }
+             } else {
+                 resultsHTML += '<p>Rabbit or Fox data not available for regression analysis.</p>';
+             }
+
+            // Display results and graph
+            analysisResultsEl.innerHTML = resultsHTML;
+            analysisContainer.style.display = 'block';
+            // Call displayGraph *after* setting HTML, passing any calculated regression data
+            displayGraph(logData, regressionLine, regressionLabel);
+        }
+
+        // --- Simulation Initialization ---
+        function initializeSimulation() {
+            console.log("Initializing simulation...");
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            simulationRunning = false;
+
+            readSettings(); // Read parameters from HTML inputs
+
+            // Reset state
+            simulationLog = [];
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+            chartContainer.style.display = 'none'; // Hide chart
+            analysisContainer.style.display = 'none'; // Hide analysis
+            analysisResultsEl.innerHTML = '<p>Analysis results will appear here after the simulation ends.</p>'; // Reset text
+            simulationContainer.style.display = 'block'; // Show simulation area
+
+            // Create new Ecosystem instance with current settings
+            ecosystem = new Ecosystem(settings.INITIAL_RESOURCES, settings.REGENERATION_RATE);
+
+            // Add species based on settings
+            ecosystem.addSpecies(new Species("Grass", settings.species.grass));
+            ecosystem.addSpecies(new Species("Rabbit", settings.species.rabbit));
+            ecosystem.addSpecies(new Species("Fox", settings.species.fox));
+            ecosystem.addSpecies(new Species("Wolf", settings.species.wolf));
+
+            // Initial UI Update
+            ecosystem.updateInfo();
+            ecosystem.draw(simCtx);
+            statusEl.textContent = "Status: Running...";
+            statusEl.className = "text-sm font-semibold text-blue-600 mb-1"; // Reset status style
+
+            simulationRunning = true; // Set running flag
+        }
+
+
+        // --- Animation Loop ---
+        let lastTime = 0;
+        let accumulatedTime = 0;
+
+        function gameLoop(currentTime) {
+            if (!simulationRunning || !ecosystem) { // Check if running and ecosystem exists
+                animationFrameId = null;
+                return;
+            }
+
+            if (lastTime === 0) lastTime = currentTime; // Initialize lastTime on first frame
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            accumulatedTime += deltaTime;
+
+            let stepsTakenThisFrame = 0;
+            const MAX_STEPS_PER_FRAME = 5; // Prevent browser freeze
+
+            // Run simulation steps based on accumulated time
+            while (accumulatedTime >= settings.SIMULATION_SPEED_MS && simulationRunning && stepsTakenThisFrame < MAX_STEPS_PER_FRAME) {
+                 ecosystem.simulateStep();
+                 accumulatedTime -= settings.SIMULATION_SPEED_MS;
+                 stepsTakenThisFrame++;
+
+                 // Check for stopping conditions INSIDE the step loop
+                 const allDead = Array.from(ecosystem.speciesMap.values()).every(sp => sp.population === 0);
+                 const maxStepsReached = ecosystem.timeStep >= settings.MAX_SIMULATION_STEPS;
+
+                 if (allDead || maxStepsReached) {
+                     simulationRunning = false;
+                     ecosystem.logCurrentState(); // Log the final state
+                     console.log("Simulation ended.");
+                     statusEl.textContent = allDead ? "Status: Ecosystem Collapse" : `Status: Ended at step ${ecosystem.timeStep}`;
+                     statusEl.className = "text-sm font-semibold text-red-600 mb-1";
+
+                     ecosystem.updateInfo(); // Update info panel one last time
+                     ecosystem.draw(simCtx);   // Draw final state
+
+                     // --- Perform Analysis & Display Graph ---
+                     performAnalysis(simulationLog); // This calls displayGraph internally now
+
+                     lastTime = 0; // Reset time for next potential run
+                     accumulatedTime = 0;
+                     animationFrameId = null; // Clear animation frame ID
+                     return; // Exit gameLoop completely
+                 }
+            }
+
+            // Draw the current state only if still running
+            if (simulationRunning) {
+                 ecosystem.draw(simCtx);
+                 ecosystem.updateInfo();
+                 animationFrameId = requestAnimationFrame(gameLoop); // Request the next frame
+            } else {
+                // Clean up if stopped for other reasons (less likely now)
+                if (ecosystem) { ecosystem.draw(simCtx); ecosystem.updateInfo(); }
+                lastTime = 0; accumulatedTime = 0; animationFrameId = null;
+            }
+        }
+
+        // --- Event Listener for Start Button ---
+        startButton.addEventListener('click', () => {
+             initializeSimulation(); // Setup the simulation with current settings
+             lastTime = 0; // Reset timer for the new run
+             accumulatedTime = 0;
+             if (!animationFrameId) { // Prevent multiple loops if clicked rapidly
+                animationFrameId = requestAnimationFrame(gameLoop); // Start the loop
+             }
+        });
+
+        // --- Initial Setup ---
+        readSettings(); // Read initial default values into settings object
+        setStaticIcons(); // Set icons in the settings panel headers
+
+    </script>
+
+</body>
+</html>
